@@ -1,3 +1,5 @@
+import random
+
 import numpy as np
 import tensorflow as tf
 
@@ -70,20 +72,54 @@ class Seq2SeqModel:
         self.saver = tf.train.Saver(tf.global_variables())
 
     def step(self, session, inputs):
+        """
+        run one step of training using the given session and inputs
+        :param session: the session to run the step
+        :param inputs: a list, each 
+        :return: 
+        """
         feed_dict = {}
+
+        if len(inputs) != self.time_len:
+            raise ValueError('The length of inputs is {}, but it must be the same as '
+                             'model\'s time length, which is {}'.format(len(inputs), self.time_len))
+
         for i in range(len(inputs)):
             feed_dict[self.encoder_inputs[i].name] = inputs[i]
-
         loss, _ = session.run([self.loss, self.train_op], feed_dict=feed_dict)
+
         return loss
 
     def get_batch(self, data):
-        """ Get a random batch of data, prepare for step.
-        :param data: 
-        :return: the encoder_inputs for the model
+        """ Get a random batch from data, prepare for **step**.
+        :param data: a list of data, each of them is of shape (data_size, )
+        :return: the encoder_inputs for the model. A list of length time_len, 
+                  each element has shape (batch_size, data_size)
         """
-        pass
+        length = len(data)
+        # prepare the start index for each batch
+
+        if data[0].shape[0] != self.input_size:
+            raise ValueError('The actual input data size is {}, which is different '
+                             'from the model\'s specified input size {}'.format(
+                                data[0].shape[0], self.input_size))
+
+        start_indices = []
+        for _ in range(self.batch_size):
+            start_indices.append(random.randint(0, length - self.time_len + 1))
+
+        encoder_inputs = []
+        for t in range(self.time_len):
+            data_t = []
+            for idx in start_indices:
+                data_t.append(data[idx + t])
+            # now data_t is of length batch_size
+            data_t = np.stack(data_t, axis=0)
+            encoder_inputs.append(data_t)
+        print(len(encoder_inputs))
+        print(encoder_inputs[0].shape)
 
 
 if __name__ == '__main__':
-    model = Seq2SeqModel(10, 1000, 1024, num_layers=2, batch_size=32, learning_rate=0.1)
+    model = Seq2SeqModel(10, 5, 100, num_layers=2, batch_size=32, learning_rate=0.1)
+    model.get_batch([np.random.randn(5) for _ in range(1000)])
