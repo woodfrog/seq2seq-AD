@@ -66,7 +66,7 @@ class Seq2SeqModel:
 
         # set up the train operation
         optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
-        self.train_op = optimizer.minimize(self.loss)
+        self.train_op = optimizer.minimize(self.loss, global_step=self.global_step)
 
         # the saver for handling all parameters for the model
         self.saver = tf.train.Saver(tf.global_variables())
@@ -75,7 +75,7 @@ class Seq2SeqModel:
         """
         run one step of training using the given session and inputs
         :param session: the session to run the step
-        :param inputs: a list, each 
+        :param inputs: a list, each element has shape ()
         :return: 
         """
         feed_dict = {}
@@ -92,34 +92,34 @@ class Seq2SeqModel:
 
     def get_batch(self, data):
         """ Get a random batch from data, prepare for **step**.
-        :param data: a list of data, each of them is of shape (data_size, )
+        :param data: a list of data, each of them is of shape (time_len, data_size)
         :return: the encoder_inputs for the model. A list of length time_len, 
                   each element has shape (batch_size, data_size)
         """
         length = len(data)
         # prepare the start index for each batch
 
-        if data[0].shape[0] != self.input_size:
+        if data[0].shape[1] != self.input_size:  # data[0]'s shape should be (time_len, data_size)
             raise ValueError('The actual input data size is {}, which is different '
                              'from the model\'s specified input size {}'.format(
-                                data[0].shape[0], self.input_size))
+                data[0].shape[0], self.input_size))
 
-        start_indices = []
+        indices = []  # get the start index for each batch
         for _ in range(self.batch_size):
-            start_indices.append(random.randint(0, length - self.time_len + 1))
+            indices.append(random.randint(0, length - self.time_len + 1))
 
         encoder_inputs = []
         for t in range(self.time_len):
             data_t = []
-            for idx in start_indices:
-                data_t.append(data[idx + t])
+            for idx in indices:
+                data_t.append(data[idx][t])
             # now data_t is of length batch_size
             data_t = np.stack(data_t, axis=0)
             encoder_inputs.append(data_t)
-        print(len(encoder_inputs))
-        print(encoder_inputs[0].shape)
+        # print(len(encoder_inputs))
+        # print(encoder_inputs[0].shape)
+        return encoder_inputs
 
-
-if __name__ == '__main__':
-    model = Seq2SeqModel(10, 5, 100, num_layers=2, batch_size=32, learning_rate=0.1)
-    model.get_batch([np.random.randn(5) for _ in range(1000)])
+    # if __name__ == '__main__':
+    # model = Seq2SeqModel(10, 5, 100, num_layers=2, batch_size=32, learning_rate=0.1)
+    # model.get_batch([np.random.randn(5) for _ in range(1000)])

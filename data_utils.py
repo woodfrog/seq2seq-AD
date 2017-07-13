@@ -1,13 +1,20 @@
 import csv
 import os
 import pickle
+import numpy as np
+import re
+
+from sklearn import preprocessing
 
 
-def preprocess(file_path):
+def preprocess(file_path, division_ratios=(0.7, 0.1, 0.1, 0.1)):
     """
-    To replace NA values with average of neighbouring data
-    :param filename: The path for the file to be processed 
-    :return: 
+    1. To replace NA values with average of neighbouring data
+    2. Standardization
+    3. Separate the data set according to the given division ration
+    :param file_path: the input file path
+    :param division_ratios: the ratio for separating the data
+    :return: No return value
     """
     data = []
     fieldnames = None
@@ -16,13 +23,14 @@ def preprocess(file_path):
         fieldnames = next(reader)
         for i, row in enumerate(reader):
             data.append(row)
-            if i == 100:
-                break
 
+    time = []
+    feature = []
     # dealing with NA values
     for row_idx, row in enumerate(data):
-        for i, entry in enumerate(row):
-            if entry == 'NA':
+        time.append(row[2])
+        for i in range(3, len(row)):
+            if row[i] == 'NA':
                 if row_idx < len(data) // 2:  # seek neighbours forwards
                     count = 0
                     total = 0
@@ -32,7 +40,7 @@ def preprocess(file_path):
                             count += 1
                         if count == 5:
                             break
-                    data[row_idx][i] = str(total * 1.0 / count)
+                    data[row_idx][i] = total * 1.0 / count
                 else:  # seek neighbours backwards
                     count = 0
                     total = 0
@@ -42,15 +50,59 @@ def preprocess(file_path):
                             count += 1
                         if count == 5:
                             break
-                    data[row_idx][i] = str(total * 1.0 / count)
+                    data[row_idx][i] = total * 1.0 / count
+            else:
+                data[row_idx][i] = float(row[i])
+        feature.append(np.asarray(data[row_idx][3:7] + data[row_idx][8:]))
+
+    # do standardization, convert to zero mean, unit variance
+    feature = preprocessing.scale(feature, axis=0)
 
     name, ext = os.path.splitext(file_path)
 
-    # save as pickle file
-    out_path = name + '_processed' + '.pickle'
-    out_dict = {'fieldnames': fieldnames, 'data': data}
-    pickle.dump(out_dict, out_path)
+    # save separated data into pickle files
+    # To separate the training data into different subsets
+    start = 0
+    for i, ratio in enumerate(division_ratios):
+        end = int(start + len(time) * ratio)
+        t_data, f_data = time[start:end], feature[start:end]
+        out_path = name + '_{}'.format(i) + '.pickle'
+        out_dict = {'fieldnames': fieldnames, 'time': t_data, 'feature': f_data}
+        with open(out_path, 'wb') as f:
+            pickle.dump(out_dict, f)
+        start = end
+
+
+def data_extract(data, tw_len, month_start, month_end, hour_start, hour_end, out_path):
+    times, features = data['time'], data['feature']
+    new_times = []
+    new_features = []
+    for i, (time, feature) in enumerate(zip(times, features)):
+        month, hour_from, minute = parse_datetime(time[1])
+        hour_to = hour_from + tw_len + (1 if minute > 0 else 0)
+        if month_start <= month <= month_end and hour_from >= hour_start \
+                and hour_to <= hour_end:
+            sequence = np.stack(features[i:i + tw_len * 60], axis=0)
+            new_features.append(sequence)
+            new_times.append(time)
+    new_data = {'time': new_times, 'feature': new_features}
+    with open(out_path+'.pickle', 'wb') as f:
+        pickle.dump(new_data, f)
+
+
+def parse_datetime(datetime):
+    elements = re.findall(r'\d+', datetime)
+    month = int(elements[1])
+    hour = int(elements[3])
+    minute = int(elements[4])
+    return month, hour, minute
 
 
 if __name__ == '__main__':
-    preprocess('train.csv')
+    with open('train_0_0.pickle', 'rb') as f:
+        data = pickle.load(f)
+        features = data['feature']
+        print(features[0].shape)
+        print(len(features))
+        # data_extract(data, tw_len=1, month_start=6,
+        #              month_end=8, hour_start=18, hour_end=22, out_path='train_0_0')
