@@ -90,7 +90,7 @@ class Seq2SeqModel:
 
         return loss
 
-    def get_batch(self, data):
+    def get_batch(self, data, shuffle=True, start=None):
         """ Get a random batch from data, prepare for **step**.
         :param data: a list of data, each of them is of shape (time_len, data_size)
         :return: the encoder_inputs for the model. A list of length time_len, 
@@ -101,12 +101,17 @@ class Seq2SeqModel:
 
         if data[0].shape[1] != self.input_size:  # data[0]'s shape should be (time_len, data_size)
             raise ValueError('The actual input data size is {}, which is different '
-                             'from the model\'s specified input size {}'.format(
-                data[0].shape[0], self.input_size))
+                             'from the model\'s specified input size {}'.format(data[0].shape[0], self.input_size))
 
         indices = []  # get the start index for each batch
-        for _ in range(self.batch_size):
-            indices.append(random.randint(0, length - self.time_len + 1))
+        if shuffle:
+            for _ in range(self.batch_size):
+                indices.append(random.randint(0, length - 1))
+        else:
+            if start is None:
+                raise ValueError('Should specify the start index for getting the batch')
+            for i in range(self.batch_size):
+                indices.append(start + i)
 
         encoder_inputs = []
         for t in range(self.time_len):
@@ -120,6 +125,6 @@ class Seq2SeqModel:
         # print(encoder_inputs[0].shape)
         return encoder_inputs
 
-    # if __name__ == '__main__':
-    # model = Seq2SeqModel(10, 5, 100, num_layers=2, batch_size=32, learning_rate=0.1)
-    # model.get_batch([np.random.randn(5) for _ in range(1000)])
+        # if __name__ == '__main__':
+        # model = Seq2SeqModel(10, 5, 100, num_layers=2, batch_size=32, learning_rate=0.1)
+        # model.get_batch([np.random.randn(5) for _ in range(1000)])

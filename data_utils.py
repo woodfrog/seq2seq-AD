@@ -78,6 +78,8 @@ def data_extract(data, tw_len, month_start, month_end, hour_start, hour_end, out
     new_times = []
     new_features = []
     for i, (time, feature) in enumerate(zip(times, features)):
+        if i + tw_len * 60 > len(features): # no enough data for building sequence of tw_len*60
+            break
         month, hour_from, minute = parse_datetime(time[1])
         hour_to = hour_from + tw_len + (1 if minute > 0 else 0)
         if month_start <= month <= month_end and hour_from >= hour_start \
@@ -86,7 +88,7 @@ def data_extract(data, tw_len, month_start, month_end, hour_start, hour_end, out
             new_features.append(sequence)
             new_times.append(time)
     new_data = {'time': new_times, 'feature': new_features}
-    with open(out_path+'.pickle', 'wb') as f:
+    with open(out_path + '.pickle', 'wb') as f:
         pickle.dump(new_data, f)
 
 
@@ -99,10 +101,23 @@ def parse_datetime(datetime):
 
 
 if __name__ == '__main__':
-    with open('train_0_0.pickle', 'rb') as f:
+    # with open('train_3.pickle', 'rb') as f:
+    #     data = pickle.load(f)
+    #     times = data['time']
+    #     count = 0
+    #     for time in times:
+    #         if 6 <= parse_datetime(time[1])[0] <= 8 and 18 <= parse_datetime(time[1])[1] <= 21:
+    #             count += 1
+    #     print(count)
+
+    with open('train_3_0.pickle', 'rb') as f:
         data = pickle.load(f)
         features = data['feature']
         print(features[0].shape)
-        print(len(features))
-        # data_extract(data, tw_len=1, month_start=6,
-        #              month_end=8, hour_start=18, hour_end=22, out_path='train_0_0')
+        for feature in features:
+            print(feature.shape)
+
+    # with open('train_3.pickle', 'rb') as f:
+    #     data = pickle.load(f)
+    #     data_extract(data, tw_len=1, month_start=6,
+    #                  month_end=8, hour_start=18, hour_end=22, out_path='train_3_0')
