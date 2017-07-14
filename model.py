@@ -63,6 +63,7 @@ class Seq2SeqModel:
         targets = tf.stack(targets, axis=1)
         self.outputs = tf.stack(outputs, axis=1)
         self.loss = tf.losses.mean_squared_error(targets, self.outputs)
+        self.error_vector = tf.abs(self.outputs - targets)
 
         # set up the train operation
         optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
@@ -71,7 +72,7 @@ class Seq2SeqModel:
         # the saver for handling all parameters for the model
         self.saver = tf.train.Saver(tf.global_variables())
 
-    def step(self, session, inputs):
+    def step(self, session, inputs, train=True):
         """
         run one step of training using the given session and inputs
         :param session: the session to run the step
@@ -86,9 +87,27 @@ class Seq2SeqModel:
 
         for i in range(len(inputs)):
             feed_dict[self.encoder_inputs[i].name] = inputs[i]
-        loss, _ = session.run([self.loss, self.train_op], feed_dict=feed_dict)
+
+        if train:
+            loss, _ = session.run([self.loss, self.train_op], feed_dict=feed_dict)
+        else:  # during validation, not running the training operation
+            loss = session.run(self.loss, feed_dict=feed_dict)
 
         return loss
+
+    def get_err_vec(self, session, inputs):
+        feed_dict = {}
+
+        if len(inputs) != self.time_len:
+            raise ValueError('The length of inputs is {}, but it must be the same as '
+                             'model\'s time length, which is {}'.format(len(inputs), self.time_len))
+
+        for i in range(len(inputs)):
+            feed_dict[self.encoder_inputs[i].name] = inputs[i]
+
+        errs = session.run(self.error_vector, feed_dict=feed_dict)
+
+        return errs
 
     def get_batch(self, data, shuffle=True, start=None):
         """ Get a random batch from data, prepare for **step**.

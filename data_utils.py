@@ -28,7 +28,7 @@ def preprocess(file_path, division_ratios=(0.7, 0.1, 0.1, 0.1)):
     feature = []
     # dealing with NA values
     for row_idx, row in enumerate(data):
-        time.append(row[2])
+        time.append(row[1])
         for i in range(3, len(row)):
             if row[i] == 'NA':
                 if row_idx < len(data) // 2:  # seek neighbours forwards
@@ -73,17 +73,16 @@ def preprocess(file_path, division_ratios=(0.7, 0.1, 0.1, 0.1)):
         start = end
 
 
-def data_extract(data, tw_len, month_start, month_end, hour_start, hour_end, out_path):
+def data_extract(data, tw_len, month_range, hour_range, out_path):
     times, features = data['time'], data['feature']
     new_times = []
     new_features = []
     for i, (time, feature) in enumerate(zip(times, features)):
-        if i + tw_len * 60 > len(features): # no enough data for building sequence of tw_len*60
+        if i + tw_len * 60 > len(features):  # no enough data for building sequence of tw_len*60
             break
-        month, hour_from, minute = parse_datetime(time[1])
+        month, hour_from, minute = parse_datetime(time)
         hour_to = hour_from + tw_len + (1 if minute > 0 else 0)
-        if month_start <= month <= month_end and hour_from >= hour_start \
-                and hour_to <= hour_end:
+        if month in month_range and hour_from in hour_range and hour_to in hour_range:
             sequence = np.stack(features[i:i + tw_len * 60], axis=0)
             new_features.append(sequence)
             new_times.append(time)
@@ -113,11 +112,13 @@ if __name__ == '__main__':
     with open('train_3_0.pickle', 'rb') as f:
         data = pickle.load(f)
         features = data['feature']
-        print(features[0].shape)
-        for feature in features:
-            print(feature.shape)
+        print(len(features))
+        # for feature in features:
+        # print(feature.shape)
+
+    # preprocess('train.csv')
 
     # with open('train_3.pickle', 'rb') as f:
     #     data = pickle.load(f)
-    #     data_extract(data, tw_len=1, month_start=6,
-    #                  month_end=8, hour_start=18, hour_end=22, out_path='train_3_0')
+    #     data_extract(data, tw_len=1, month_range=(6, 7, 8), hour_range=(18, 19, 20, 21, 22), out_path='train_3_0')
+
