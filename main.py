@@ -9,7 +9,7 @@ from model import Seq2SeqModel
 tf.app.flags.DEFINE_integer("steps_per_checkpoint", 400,
                             "How many training steps to do per checkpoint.")
 tf.app.flags.DEFINE_string("train_dir", "./train", "Training directory.")
-tf.app.flags.DEFINE_integer('total_steps', 10000,
+tf.app.flags.DEFINE_integer('total_steps', 20000,
                             'How many training steps to take')
 tf.app.flags.DEFINE_integer('batch_size', 64,
                             'the batch size for training')
@@ -25,8 +25,7 @@ FLAGS = tf.app.flags.FLAGS
 def read_data(path):
     with open(path, 'rb') as f:
         data = pickle.load(f)
-    features = data['feature']
-    return features
+    return data
 
 
 def create_model(session):
@@ -49,7 +48,7 @@ def train():
         model = create_model(sess)
         print('model created')
 
-        features = read_data('train_0_0.pickle')
+        features = read_data('train_0_0.pickle')['feature']
         loss = 0.0
         current_step = 0
 
@@ -60,7 +59,7 @@ def train():
             current_step += 1
 
             if current_step % FLAGS.steps_per_checkpoint == 0:
-                val_features = read_data('train_0_1.pickle')
+                val_features = read_data('train_0_1.pickle')['feature']
                 val_inputs = model.get_batch(val_features)
                 val_loss = model.step(session=sess, inputs=val_inputs, train=False)
 
@@ -76,7 +75,7 @@ def evaluate():
         model = create_model(sess)
         print('model loaded')
 
-        features = read_data('train_0_0.pickle')
+        features = read_data('train_0_0.pickle')['feature']
         print('read data, contains {} sequences'.format(len(features)))
 
         batch_size = FLAGS.batch_size
@@ -94,13 +93,14 @@ def evaluate():
         print('Evaluation completed, loss {}'.format(loss))
 
 
-def get_errs(out_name):
+def get_errs(read_path, out_name):
     with tf.Session() as sess:
         model = create_model(sess)
         print('model loaded')
 
-        features = read_data('train_3_0.pickle')
-        print('read data, contains {} sequences'.format(len(features)))
+        data = read_data(read_path)
+        features = data['feature']
+        print('read data for getting err vecs, contains {} sequences'.format(len(features)))
 
         batch_size = FLAGS.batch_size
         num_batch = len(features) // batch_size  # the number of batches
@@ -113,23 +113,82 @@ def get_errs(out_name):
             vectors.append(batch_err_vec)
 
         vectors = np.concatenate(vectors, axis=0)
+        result = {'time': data['time'], 'vectors': vectors, 'index': data['index']}
 
         with open(out_name + '.pickle', 'wb') as f:
-            pickle.dump(vectors, f)
+            pickle.dump(result, f)
 
 
-def fit_err_vec(vecs):
-    vecs_per_t = np.split(vecs, indices_or_sections=vecs.shape[1], axis=1)
-    for i in range(len(vecs_per_t)):
-        vecs_per_t[i] = np.squeeze(vecs_per_t[i], axis=1)
-    means = []
-    covs = []
-    for t, err_vecs in enumerate(vecs_per_t):
-        mean = np.mean(err_vecs, axis=0)
-        cov = np.cov(err_vecs, rowvar=False)
-        means.append(mean)
-        covs.append(cov)
-    return means, covs
+def fit_err_vec(vec_filename):
+    with open(vec_filename, 'rb') as f:
+        data = pickle.load(f)
+        vecs = data['vectors']
+        vecs_per_t = np.split(vecs, indices_or_sections=vecs.shape[1], axis=1)
+        for i in range(len(vecs_per_t)):
+            vecs_per_t[i] = np.squeeze(vecs_per_t[i], axis=1)
+        means = []
+        covs = []
+        for t, err_vecs in enumerate(vecs_per_t):
+            mean = np.mean(err_vecs, axis=0)
+            cov = np.cov(err_vecs, rowvar=False)
+            means.append(mean)
+            covs.append(cov)
+        return means, covs
+
+
+def detect_anomaly(ref_file, test_vec_file, orig_test_file):
+    means, covs = fit_err_vec(ref_file)
+
+    ref_vecs = None
+    test_vecs = None
+    test_indices = None
+    with open(ref_file, 'rb') as f:
+        data = pickle.load(f)
+        ref_vecs = data['vectors']
+
+    with open(test_vec_file, 'rb') as f:
+        data = pickle.load(f)
+        test_vecs = data['vectors']
+        test_indices = data['index']
+
+    anomalies = []
+    for t in range(len(means)):
+
+        # get the maximal distance in the reference set
+        max_ref_dis = 0
+        for i in range(len(ref_vecs)):
+            dis = distance.mahalanobis(u=ref_vecs[i][t], v=means[t], VI=np.linalg.inv(covs[t]))
+            if dis > max_ref_dis:
+                max_ref_dis = dis
+
+        # print('max distance for time {} is {}'.format(t, max_ref_dis))
+
+        for i in range(len(test_vecs)):
+            dis = distance.mahalanobis(u=test_vecs[i][t], v=means[t], VI=np.linalg.inv(covs[t]))
+            if dis > max_ref_dis + 3:
+                anomalies.append(([test_indices[i], t]))
+                # print('anomaly detected, with distance {}'.format(dis))
+
+    times = None
+    with open(orig_test_file, 'rb') as f:
+        times = pickle.load(f)['time']
+
+    print(times[len(times) - 1])
+
+    anomaly_times = summarize_time(anomalies, times)
+    return anomaly_times
+
+
+def summarize_time(anomalies, times):
+    anomaly_indices = []
+    for anomaly in anomalies:
+        start, shift = anomaly[0], anomaly[1]
+        anomaly_indices.append(start+shift)
+    anomaly_indices = sorted(list(set(anomaly_indices)))
+    anomaly_times = []
+    for index in anomaly_indices:
+        anomaly_times.append(times[index])
+    return anomaly_times
 
 
 if __name__ == '__main__':
@@ -139,16 +198,10 @@ if __name__ == '__main__':
     For 1 layer LSTM with size of 64, 
     
     '''
-    evaluate()
-
-    # vecs = None
-    # with open('err_vec_0.pickle', 'rb') as f:
-    #     vecs = pickle.load(f)
-    #
-    # means, covs = fit_err_vec(vecs)
-    #
-    # total_diff = 0
-    # print(means[30])
-    # for i in range(len(vecs)):
-    #     total_diff += distance.mahalanobis(u=vecs[i][30], v=means[30], VI=np.linalg.inv(covs[30]))
-    # print(total_diff / len(vecs))
+    # evaluate()
+    # get_errs(read_path='test_v1_0_0.pickle', out_name='err_vec_testv1_0')
+    result = detect_anomaly(ref_file='err_vec_0.pickle', test_vec_file='err_vec_testv1_0.pickle',
+                            orig_test_file='test_v1_0.pickle')
+    print(len(result))
+    for time in result:
+        print(time)
