@@ -7,7 +7,7 @@ import re
 from sklearn import preprocessing
 
 
-def preprocess(file_path, division_ratios=(0.7, 0.1, 0.1, 0.1)):
+def preprocess(file_path, division_ratios=(0.8, 0.2)):
     """
     1. To replace NA values with average of neighbouring data
     2. Standardization
@@ -17,7 +17,6 @@ def preprocess(file_path, division_ratios=(0.7, 0.1, 0.1, 0.1)):
     :return: No return value
     """
     data = []
-    fieldnames = None
     with open(file_path, mode='r') as f:
         reader = csv.reader(f)
         fieldnames = next(reader)
@@ -28,8 +27,8 @@ def preprocess(file_path, division_ratios=(0.7, 0.1, 0.1, 0.1)):
     feature = []
     # dealing with NA values
     for row_idx, row in enumerate(data):
-        time.append(row[1])
-        for i in range(3, len(row)):
+        time.append(row[0] + ' ' + row[1])  # concatenate date and time
+        for i in range(2, len(row)):  # start from the first feature
             if row[i] == 'NA':
                 if row_idx < len(data) // 2:  # seek neighbours forwards
                     count = 0
@@ -53,7 +52,8 @@ def preprocess(file_path, division_ratios=(0.7, 0.1, 0.1, 0.1)):
                     data[row_idx][i] = total * 1.0 / count
             else:
                 data[row_idx][i] = float(row[i])
-        feature.append(np.asarray(data[row_idx][3:7] + data[row_idx][8:]))
+
+        feature.append(np.asarray((data[row_idx][2],) + (data[row_idx][5],)))
 
     # do standardization, convert to zero mean, unit variance
     feature = preprocessing.scale(feature, axis=0)
@@ -78,7 +78,11 @@ def data_extract(data, tw_len, month_range, hour_range, out_path):
     new_times = []
     new_features = []
     indices = []
-    for i, (time, feature) in enumerate(zip(times, features)):
+
+    i = 0
+
+    while True:
+        time = times[i]
         if i + tw_len * 60 > len(features):  # no enough data for building sequence of tw_len*60
             break
         month, hour_from, minute = parse_datetime(time)
@@ -88,6 +92,8 @@ def data_extract(data, tw_len, month_range, hour_range, out_path):
             new_features.append(sequence)
             new_times.append(time)
             indices.append(i)
+        i += 60
+
     new_data = {'time': new_times, 'feature': new_features, 'index': indices}
     with open(out_path + '.pickle', 'wb') as f:
         pickle.dump(new_data, f)
@@ -102,25 +108,45 @@ def parse_datetime(datetime):
 
 
 if __name__ == '__main__':
-# with open('train_3.pickle', 'rb') as f:
-#     data = pickle.load(f)
-#     times = data['time']
-#     count = 0
-#     for time in times:
-#         if 6 <= parse_datetime(time[1])[0] <= 8 and 18 <= parse_datetime(time[1])[1] <= 21:
-#             count += 1
-#     print(count)
+    # with open('train_3.pickle', 'rb') as f:
+    #     data = pickle.load(f)
+    #     times = data['time']
+    #     count = 0
+    #     for time in times:
+    #         if 6 <= parse_datetime(time[1])[0] <= 8 and 18 <= parse_datetime(time[1])[1] <= 21:
+    #             count += 1
+    #     print(count)
 
-# with open('test_v1_0_0.pickle', 'rb') as f:
-#     data = pickle.load(f)
-# features = data['feature']
-# print(len(features))
-# print(data['time'])
-# for feature in features:
-# print(feature.shape)
+    # with open('test_v1_0_0.pickle', 'rb') as f:
+    #     data = pickle.load(f)
+    # features = data['feature']
+    # print(len(features))
+    # print(data['time'])
+    # for feature in features:
+    # print(feature.shape)
 
-    # preprocess('test_v1.csv', division_ratios=(1,))
+    # preprocess('train.txt')
+    # preprocess('test1.txt', division_ratios=(1,))
+    #
+    hour_range = tuple([i for i in range(6, 13)])
 
-    with open('test_v1_0.pickle', 'rb') as f:
+    with open('train_0.pickle', 'rb') as f:
         data = pickle.load(f)
-        data_extract(data, tw_len=1, month_range=(6, 7, 8), hour_range=(18, 19, 20, 21, 22), out_path='test_v1_0_0')
+        print(len(data['feature']))
+        print(data['time'][0])
+        data_extract(data, tw_len=2, month_range=(4, 5, 6, 7, 8, 9), hour_range=hour_range,
+                     out_path='train_summer_day')
+
+    with open('test1_0.pickle', 'rb') as f:
+        data = pickle.load(f)
+        print(len(data['feature']))
+        print(data['time'][0])
+        data_extract(data, tw_len=2, month_range=(4, 5, 6, 7, 8, 9), hour_range=hour_range,
+                     out_path='test1_summer_day')
+
+    with open('train_1.pickle', 'rb') as f:
+        data = pickle.load(f)
+        print(len(data['feature']))
+        print(data['time'][0])
+        data_extract(data, tw_len=2, month_range=(4, 5, 6, 7, 8, 9), hour_range=hour_range,
+                     out_path='val_summer_day')
