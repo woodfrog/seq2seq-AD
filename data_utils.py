@@ -3,6 +3,7 @@ import os
 import pickle
 import numpy as np
 import re
+import math
 
 from sklearn import preprocessing
 
@@ -53,7 +54,7 @@ def preprocess(file_path, division_ratios=(0.8, 0.2)):
             else:
                 data[row_idx][i] = float(row[i])
 
-        feature.append(np.asarray((data[row_idx][2],) + (data[row_idx][5],)))
+        feature.append(np.asarray((data[row_idx][2:6])))
 
     # do standardization, convert to zero mean, unit variance
     feature = preprocessing.scale(feature, axis=0)
@@ -86,13 +87,15 @@ def data_extract(data, tw_len, month_range, hour_range, out_path):
         if i + tw_len * 60 > len(features):  # no enough data for building sequence of tw_len*60
             break
         month, hour_from, minute = parse_datetime(time)
-        hour_to = hour_from + tw_len + (1 if minute > 0 else 0)
+        hour_to = hour_from + math.ceil(tw_len)
         if month in month_range and hour_from in hour_range and hour_to in hour_range:
-            sequence = np.stack(features[i:i + tw_len * 60], axis=0)
+            sequence = np.stack(features[i:i + int(tw_len * 60)], axis=0)
             new_features.append(sequence)
             new_times.append(time)
             indices.append(i)
-        i += 60
+        i += int(60*tw_len)
+        if i >= len(times):
+            break
 
     new_data = {'time': new_times, 'feature': new_features, 'index': indices}
     with open(out_path + '.pickle', 'wb') as f:
@@ -126,27 +129,37 @@ if __name__ == '__main__':
     # print(feature.shape)
 
     # preprocess('train.txt')
-    # preprocess('test1.txt', division_ratios=(1,))
+
+    # preprocess('Otest1.txt', division_ratios=(1,))
+    # preprocess('Otest2.txt', division_ratios=(1,))
+    # preprocess('Otest3.txt', division_ratios=(1,))
+
+    hour_range = tuple([i for i in range(0, 24)])
+    # month_range = (1, 2, 3, 10, 11, 12)
+    month_range = (4, 5, 6, 7, 8, 9)
     #
-    hour_range = tuple([i for i in range(6, 13)])
-
-    with open('train_0.pickle', 'rb') as f:
+    # with open('train_0.pickle', 'rb') as f:
+    #     data = pickle.load(f)
+    #     print('total data points: ', len(data['feature']))
+    #     print(data['time'][0])
+    #     data_extract(data, tw_len=1.0/6, month_range=month_range, hour_range=hour_range,
+    #                  out_path='train_10_winter')
+    #
+    with open('Otest1_0.pickle', 'rb') as f:
         data = pickle.load(f)
-        print(len(data['feature']))
+        print('total data points: ', len(data['feature']))
         print(data['time'][0])
-        data_extract(data, tw_len=2, month_range=(4, 5, 6, 7, 8, 9), hour_range=hour_range,
-                     out_path='train_summer_day')
+        data_extract(data, tw_len=1.0/6, month_range=month_range, hour_range=hour_range,
+                     out_path='Otest1_summer')
+    #
+    # with open('train_1.pickle', 'rb') as f:
+    #     data = pickle.load(f)
+    #     print('total data points: ', len(data['feature']))
+    #     print(data['time'][0])
+    #     data_extract(data, tw_len=1.0/6, month_range=month_range, hour_range=hour_range,
+    #                  out_path='val_10_winter')
 
-    with open('test1_0.pickle', 'rb') as f:
-        data = pickle.load(f)
-        print(len(data['feature']))
-        print(data['time'][0])
-        data_extract(data, tw_len=2, month_range=(4, 5, 6, 7, 8, 9), hour_range=hour_range,
-                     out_path='test1_summer_day')
-
-    with open('train_1.pickle', 'rb') as f:
-        data = pickle.load(f)
-        print(len(data['feature']))
-        print(data['time'][0])
-        data_extract(data, tw_len=2, month_range=(4, 5, 6, 7, 8, 9), hour_range=hour_range,
-                     out_path='val_summer_day')
+    # with open('train_winter_.pickle', 'rb') as f:
+    #     data = pickle.load(f)
+    #     features = data['feature']
+    #     print(len(features))

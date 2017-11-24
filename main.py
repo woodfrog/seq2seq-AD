@@ -8,14 +8,14 @@ from model import Seq2SeqModel
 
 tf.app.flags.DEFINE_integer("steps_per_checkpoint", 400,
                             "How many training steps to do per checkpoint.")
-tf.app.flags.DEFINE_string("train_dir", "./model-sum-day", "Training directory.")
-tf.app.flags.DEFINE_integer('total_steps', 20000,
+tf.app.flags.DEFINE_string("train_dir", './model-10-sum', "Training directory.")
+tf.app.flags.DEFINE_integer('total_steps', 10000,
                             'How many training steps to take')
 tf.app.flags.DEFINE_integer('batch_size', 64,
                             'the batch size for training')
 tf.app.flags.DEFINE_float('learning_rate', 0.001, 'learning rate')
-tf.app.flags.DEFINE_integer('time_len', 120, 'the length of time window (in minute)')
-tf.app.flags.DEFINE_integer('data_size', 2, 'the dimension of each data point')
+tf.app.flags.DEFINE_integer('time_len', 10, 'the length of time window (in minute)')
+tf.app.flags.DEFINE_integer('data_size', 4, 'the dimension of each data point')
 tf.app.flags.DEFINE_integer('unit_size', 64, 'the size of each LSTM layer (dimension of hidden states)')
 tf.app.flags.DEFINE_integer('num_layers', 1, 'the number of LSTM layers in the model')
 
@@ -45,11 +45,14 @@ def create_model(session, feed_previous):
 
 def train():
     with tf.Session() as sess:
-        model = create_model(sess, feed_previous=True)
+        model = create_model(sess, feed_previous=False)
         print('model created')
 
-        features = read_data('train_summer_day.pickle')['feature']
-        val_features = read_data('val_summer_day.pickle')['feature']
+        features = read_data('train_10_summer.pickle')['feature']
+        val_features = read_data('val_10_summer.pickle')['feature']
+
+        print('total training instances: ', len(features))
+        print('total validation instances: ', len(val_features))
 
         if len(features[0].shape) == 1:  # if the data dimension is only 1, we expend the dimension by 1
             for i, element in enumerate(features):
@@ -81,10 +84,10 @@ def train():
 
 def evaluate():
     with tf.Session() as sess:
-        model = create_model(sess, feed_previous=False)
+        model = create_model(sess, feed_previous=True)
         print('model loaded')
 
-        features = read_data('test1_summer_day.pickle')['feature']
+        features = read_data('test2_10_summer.pickle')['feature']
         print('read data, contains {} sequences'.format(len(features)))
 
         if len(features[0].shape) == 1:  # if the data dimension is only 1, we expend the dimension by 1
@@ -109,7 +112,7 @@ def evaluate():
 
 def get_errs(read_path, out_name):
     with tf.Session() as sess:
-        model = create_model(sess, feed_previous=False)
+        model = create_model(sess, feed_previous=True)
         print('model loaded')
 
         data = read_data(read_path)
@@ -173,6 +176,7 @@ def detect_anomaly(ref_file, test_vec_file, orig_test_file):
     for t in range(len(means)):
 
         # get the maximal distance in the reference set
+        sum_ref_dis = 0
         max_ref_dis = 0
         for i in range(len(ref_vecs)):
 
@@ -180,14 +184,18 @@ def detect_anomaly(ref_file, test_vec_file, orig_test_file):
                 covs[t] = np.linalg.inv(covs[t].reshape((1, 1)))
 
             dis = distance.mahalanobis(u=ref_vecs[i][t], v=means[t], VI=np.linalg.inv(covs[t]))
+
             if dis > max_ref_dis:
                 max_ref_dis = dis
+            sum_ref_dis += dis
+
+        avg_ref_dis = sum_ref_dis / len(ref_vecs)
 
         # print('max distance for time {} is {}'.format(t, max_ref_dis))
 
         for i in range(len(test_vecs)):
             dis = distance.mahalanobis(u=test_vecs[i][t], v=means[t], VI=np.linalg.inv(covs[t]))
-            if dis > max_ref_dis * 1.25:
+            if dis > avg_ref_dis + (max_ref_dis - avg_ref_dis) * 2 / 3:
                 anomalies.append(([test_indices[i], t]))
                 # print('anomaly detected, with distance {}'.format(dis))
 
@@ -221,19 +229,22 @@ if __name__ == '__main__':
     The same standard only gets 80 anomaly points on training set. The result looks reasonable
     
     '''
+
     # train()
     # evaluate()
     # get_errs(read_path='val_summer_day.pickle', out_name='val_err_summer_day')
 
-    # get_errs(read_path='test1_summer_day.pickle', out_name='test1_err_summer_day')
+    # get_errs(read_path='Otest2_winter.pickle', out_name='Otest2_err_winter')
+
+    # get_errs(read_path='val_10_winter.pickle', out_name='val_10_err_winter')
 
     # with open('testv1_err_vec.pickle', 'rb') as f:
     # data = pickle.load(f)
     # print(data['vectors'][0].shape)
     # print(len(data['vectors']))
 
-    # times, indices = detect_anomaly(ref_file='val_err_summer_day.pickle', test_vec_file='test1_err_summer_day.pickle',
-    #                                 orig_test_file='test1_0.pickle')
-    # print(len(times))
-    # for time in times:
-    #     print(time)
+    times, indices = detect_anomaly(ref_file='val_10_err_winter.pickle', test_vec_file='Otest3_err_winter.pickle',
+                                    orig_test_file='Otest3_0.pickle')
+    print(len(times))
+    for time in times:
+        print(time)

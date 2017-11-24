@@ -2,3 +2,7 @@
 .idea
 *.pickle
 __pycache__
+*.txt
+*.zip
+model*
+.DS_Store

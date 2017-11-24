@@ -13,7 +13,9 @@ from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import rnn
 
 '''
+
 https://github.com/tensorflow/tensorflow/blob/master/tensorflow/contrib/legacy_seq2seq/python/ops/seq2seq.py
+
 '''
 
 
@@ -65,9 +67,12 @@ def advanced_rnn_seq2seq(encoder_inputs,
             dtype = scope.dtype
 
         # Encoder.
-        encoder_cell = copy.deepcopy(cell)
+        encoder_cell = copy.deepcopy(cell)  # different weights, so use deepcopy here
 
         _, encoder_state = rnn.static_rnn(encoder_cell, encoder_inputs, dtype=dtype)
+
+        print('encoder state', encoder_state[-1].h, type(encoder_state[-1]), sep='\n')
+        # print(encoder_state)
 
         # Decoder.
 
@@ -114,6 +119,9 @@ class Seq2SeqModel:
         cell = single_cell()
         if num_layers > 1:
             cell = MultiRNNCell([single_cell() for _ in range(num_layers)])
+
+        print('state size', cell.state_size)
+        print('zero state size', cell.zero_state(self.batch_size, dtype=tf.float32))
 
         # Set placeholder for encoder's inputs
         self.encoder_inputs = []
@@ -244,6 +252,6 @@ class Seq2SeqModel:
 
 if __name__ == '__main__':
     pass
-# test the whether the model can be build
-# model = Seq2SeqModel(10, 5, 100, num_layers=2, batch_size=32, learning_rate=0.1, feed_previous=True)
-# print('model built')
+    # test the whether the model can be build
+    model = Seq2SeqModel(10, 5, 100, num_layers=2, batch_size=32, learning_rate=0.1, feed_previous=True)
+    print('model built')
